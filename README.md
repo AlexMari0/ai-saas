@@ -44,7 +44,8 @@ A fullstack AI-powered SaaS web application built with a modern tech stack. This
   * Image processing
 * Integrations:
 
-  * OpenAI (AI features)
+  * Gemini AI (AI features via OpenAI SDK)
+  * Stability AI (AI Image generation)
   * Cloudinary (image storage & processing)
   * Neon Database (serverless DB)
   * Clerk (authentication)
@@ -55,22 +56,25 @@ A fullstack AI-powered SaaS web application built with a modern tech stack. This
 
 ### Frontend
 
-* React
-* Vite
-* TailwindCSS
+* React 19
+* Vite 8
+* TailwindCSS v4
 * Axios
 * React Router DOM
 * React Markdown
 * Clerk (Authentication)
 * Lucide React (Icons)
+* React Hot Toast (Notifications)
 
 ### Backend
 
-* Express.js
-* OpenAI API
+* Express.js 5
+* Gemini API (via OpenAI SDK)
+* Stability AI API
 * Cloudinary
 * Multer (File uploads)
-* Neon Database
+* unpdf (PDF text extraction)
+* Neon Database (Serverless PostgreSQL)
 * Clerk Express SDK
 * Axios
 
@@ -112,13 +116,15 @@ npm install
 Create a `.env` file in `/server`:
 
 ```
-PORT=5000
-OPENAI_API_KEY=your_key
+PORT=3000
+GEMINI_API_KEY=your_gemini_key
+STABILITY_API_KEY=your_stability_key
 CLOUDINARY_CLOUD_NAME=your_name
 CLOUDINARY_API_KEY=your_key
 CLOUDINARY_API_SECRET=your_secret
 DATABASE_URL=your_neon_db_url
 CLERK_SECRET_KEY=your_clerk_secret
+CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
 ```
 
 Run server:
@@ -139,8 +145,8 @@ npm install
 Create a `.env` file in `/client`:
 
 ```
-VITE_API_URL=http://localhost:5000
-VITE_CLERK_PUBLISHABLE_KEY=your_clerk_key
+VITE_BASE_URL=http://localhost:3000
+VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
 ```
 
 Run client:
@@ -211,10 +217,82 @@ Authentication is handled via **Clerk**, including:
 
 ---
 
+## 📖 API Documentation
+
+Semua endpoint di bawah ini memerlukan token JWT aktif di header `Authorization` dengan format: `Bearer <clerk_token>` (didapatkan dari SDK `@clerk/react`).
+
+### 1. Endpoint Fitur AI (`/api/ai/*`)
+
+* **`POST /api/ai/generate-article`**
+  * **Fungsi:** Membuat artikel panjang secara otomatis menggunakan Gemini AI.
+  * **Payload:** `{ "prompt": "Topik artikel", "length": 1000 }`
+  * **Response (Success):** `{ "success": true, "content": "Teks artikel..." }`
+
+* **`POST /api/ai/generate-blog-title`**
+  * **Fungsi:** Menyarankan judul blog berdasarkan kata kunci dan kategori.
+  * **Payload:** `{ "prompt": "Keyword/Kategori judul" }`
+  * **Response (Success):** `{ "success": true, "content": "Rekomendasi judul..." }`
+
+* **`POST /api/ai/generate-image`** *(Premium Only)*
+  * **Fungsi:** Menghasilkan gambar berkualitas tinggi dari Stability AI dan disimpan ke Cloudinary.
+  * **Payload:** `{ "prompt": "Deskripsi gambar", "publish": false }`
+  * **Response (Success):** `{ "success": true, "content": "https://res.cloudinary.com/...image.png" }`
+
+* **`POST /api/ai/remove-image-background`** *(Premium Only)*
+  * **Fungsi:** Menghapus background gambar menggunakan filter AI Cloudinary.
+  * **Payload:** `multipart/form-data` dengan field `"image"` (file gambar).
+  * **Response (Success):** `{ "success": true, "content": "https://res.cloudinary.com/...image.png" }`
+
+* **`POST /api/ai/remove-image-object`** *(Premium Only)*
+  * **Fungsi:** Menghapus objek tertentu dari gambar menggunakan Cloudinary GenRemove.
+  * **Payload:** `multipart/form-data` dengan field `"image"` (file gambar) dan `"object"` (nama objek yang akan dihapus, tipe teks).
+  * **Response (Success):** `{ "success": true, "content": "https://res.cloudinary.com/...image.png" }`
+
+* **`POST /api/ai/resume-review`** *(Premium Only)*
+  * **Fungsi:** Mengekstrak PDF resume dan meninjau kekurangannya menggunakan Gemini AI.
+  * **Payload:** `multipart/form-data` dengan field `"resume"` (file PDF).
+  * **Response (Success):** `{ "success": true, "content": "Teks evaluasi resume..." }`
+
+### 2. Endpoint Data User & Komunitas (`/api/user/*`)
+
+* **`GET /api/user/get-user-creations`**
+  * **Fungsi:** Mengambil semua daftar riwayat kreasi milik user aktif.
+  * **Response (Success):** `{ "success": true, "creations": [...] }`
+
+* **`GET /api/user/get-published-creations`**
+  * **Fungsi:** Mengambil daftar kreasi yang dipublikasikan secara publik ke komunitas.
+  * **Response (Success):** `{ "success": true, "creations": [...] }`
+
+* **`POST /api/user/toggle-like-creation`**
+  * **Fungsi:** Menyukai atau membatalkan suka (*like/unlike*) pada kreasi tertentu.
+  * **Payload:** `{ "id": "id_creation_target" }`
+  * **Response (Success):** `{ "success": true, "message": "Creation Liked" | "Creation Unliked" }`
+
+---
+
+## 🧠 Technical Decisions (Catatan Keputusan Teknis)
+
+Berikut adalah ringkasan keputusan teknis arsitektur yang diambil dalam pengembangan platform ini:
+
+1. **Neon Serverless PostgreSQL:**
+   * *Keputusan:* Menggunakan `@neondatabase/serverless` menggantikan pool koneksi pg standar.
+   * *Rasional:* Driver PG tradisional kurang andal dan rentan kehabisan batas koneksi (*connection limit*) di lingkungan serverless seperti Vercel. Neon PostgreSQL serverless client memungkinkan komunikasi kueri SQL instan melalui HTTP websockets dan dapat melakukan skala koneksi ke nol saat database tidak aktif untuk efisiensi biaya.
+2. **Clerk untuk Autentikasi & Premium Subscription:**
+   * *Keputusan:* Mendelegasikan autentikasi dan penanganan kuota user ke Clerk Auth-as-a-Service.
+   * *Rasional:* Membangun sistem JWT lokal, penanganan hashing, dan session stores membutuhkan banyak waktu. Clerk menyediakan antarmuka siap pakai, integrasi login sosial yang aman, dan penanganan flag kuota gratis (`free_usage`) melalui `privateMetadata` user secara bawaan.
+3. **Gemini API via OpenAI SDK Wrapper:**
+   * *Keputusan:* Mengakses model `gemini-3-flash-preview` menggunakan integrasi OpenAI Node SDK.
+   * *Rasional:* Gemini 3 Flash menawarkan kecepatan pemrosesan super cepat dan sangat efisien secara biaya. Memanggilnya via OpenAI SDK Wrapper memudahkan modularitas kode jika di masa depan arsitektur beralih ke model GPT OpenAI tanpa harus menulis ulang kode kueri SDK.
+4. **Cloudinary AI Media Transformations:**
+   * *Keputusan:* Offload pemrosesan gambar (Background Removal & Object Erasure) langsung ke CDN Cloudinary.
+   * *Rasional:* Melakukan komputasi AI manipulasi gambar secara lokal memerlukan resource server CPU/GPU yang sangat besar. Menggunakan Cloudinary AI Transformation menyelesaikan pengeditan secara instan di cloud hanya dengan mengubah string URL hasil unggahan.
+
+---
+
 ## 📌 Notes
 
 * Ensure all environment variables are correctly configured
-* OpenAI usage may incur costs
+* Gemini & Stability AI usage may incur costs
 * Cloudinary is required for image features
 * Neon DB is used for scalable serverless database
 

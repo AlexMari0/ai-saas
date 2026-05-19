@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { useAuth, useUser } from "@clerk/react";
-import { dummyPublishedCreationData } from "../assets/assets";
 import { Heart } from "lucide-react";
 import axios from "axios";
 import toast from "react-hot-toast";
